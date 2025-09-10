@@ -1,14 +1,27 @@
+import cv2
 import streamlit as st
 import tempfile
-import cv2
+from ultralytics import YOLO
+import yt_dlp
+from streamlit_drawable_canvas import st_canvas
+from PIL import Image
 import platform
 import os
-from ultralytics import YOLO
 
 if platform.system() == "Windows":
     import winsound
 else:
     from playsound import playsound
+
+st.title("👀 Person Detection in ROI 🎥")
+
+model = YOLO("yolov8s.pt")
+
+def get_youtube_stream_url(yt_url):
+    ydl_opts = {"format": "best[ext=mp4]/best", "quiet": True}
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(yt_url, download=False)
+        return info["url"]
 
 def beep():
     if platform.system() == "Windows":
@@ -17,43 +30,86 @@ def beep():
         if os.path.exists("alert.wav"):
             playsound("alert.wav")
 
-st.set_page_config(page_title="Smart ROI Surveillance", layout="wide")
-st.title("Smart ROI Surveillance")
-
-video_file = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
-use_cam = st.checkbox("Use Webcam")
-
-conf = st.slider("Confidence", 0.1, 1.0, 0.5)
-model_name = st.selectbox("Model", ["yolov8n.pt", "yolov8s.pt"])
-model = YOLO(model_name)
-
-if video_file or use_cam:
-    tmp = None
-    if video_file:
-        tmp = tempfile.NamedTemporaryFile(delete=False)
-        tmp.write(video_file.read())
-        path = tmp.name
-    else:
-        path = 0
-
-    cap = cv2.VideoCapture(path)
-    frame_window = st.empty()
-
-    while cap.isOpened():
-        ok, frame = cap.read()
-        if not ok:
-            break
-        results = model(frame, conf=conf)
-        view = results[0].plot()
-        frame_window.image(view, channels="BGR")
-
-        for box in results[0].boxes:
+def detect_person_in_roi(frame, roi, model):
+    found = False
+    if roi is None:
+        return frame, found
+    x1, y1, x2, y2 = roi
+    roi_frame = frame[y1:y2, x1:x2]
+    results = model.predict(roi_frame, imgsz=640, conf=0.5, verbose=False)
+    for r in results:
+        for box in r.boxes:
             cls = int(box.cls[0])
-            name = model.names[cls]
-            if name.lower() == "person":
-                beep()
-                break
+            if model.names[cls] == "person":
+                found = True
+                xA, yA, xB, yB = map(int, box.xyxy[0])
+                cv2.rectangle(frame, (x1+xA, y1+yA), (x1+xB, y1+yB), (0, 255, 0), 2)
+                cv2.putText(frame, "Person", (x1+xA, y1+yA-10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    return frame, found
 
+source = st.radio("Select video source", ["Upload Video", "YouTube Link", "Live Camera"])
+cap = None
+
+if source == "Upload Video":
+    uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "avi", "mov"])
+    if uploaded_file:
+        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        temp_file.write(uploaded_file.read())
+        cap = cv2.VideoCapture(temp_file.name)
+
+elif source == "YouTube Link":
+    yt_url = st.text_input("Enter YouTube URL:")
+    if yt_url:
+        try:
+            stream_url = get_youtube_stream_url(yt_url)
+            cap = cv2.VideoCapture(stream_url)
+        except Exception as e:
+            st.error(f"Failed to load YouTube video: {e}")
+
+elif source == "Live Camera":
+    cap = cv2.VideoCapture(0)
+
+roi = None
+
+if cap:
+    ret, frame = cap.read()
+    if ret:
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(frame_rgb)
+        st.write("🖌️ Draw a rectangle to select ROI")
+        canvas = st_canvas(
+            fill_color="rgba(255, 0, 0, 0.2)",
+            stroke_color="red",
+            background_image=pil_img,
+            update_streamlit=True,
+            height=frame_rgb.shape[0],
+            width=frame_rgb.shape[1],
+            drawing_mode="rect",
+            key="roi_canvas"
+        )
+        if canvas.json_data and len(canvas.json_data["objects"]) > 0:
+            obj = canvas.json_data["objects"][0]
+            left, top = int(obj["left"]), int(obj["top"])
+            width, height = int(obj["width"]), int(obj["height"])
+            roi = (left, top, left + width, top + height)
+            st.success(f"ROI selected: {roi}")
+
+    stframe = st.empty()
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if roi:
+            cv2.rectangle(frame, (roi[0], roi[1]), (roi[2], roi[3]), (255, 0, 0), 2)
+        frame, found = detect_person_in_roi(frame, roi, model)
+        if found:
+            beep()
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        stframe.image(frame_rgb, channels="RGB")
     cap.release()
-    if tmp:
-        os.remove(tmp.name)
+
+st.markdown(
+    "<div style='position: fixed; bottom: 10px; right: 10px; font-size:12px;'>❤️😊enhanced using ChatGPT</div>",
+    unsafe_allow_html=True
+)
