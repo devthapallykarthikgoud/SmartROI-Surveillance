@@ -5,12 +5,10 @@ from ultralytics import YOLO
 import yt_dlp
 from streamlit_drawable_canvas import st_canvas
 from PIL import Image
-import platform
 import os
-import simpleaudio as sa
 
 st.set_page_config(page_title="Smart ROI Surveillance", layout="wide")
-st.title("👀 Smart ROI Person Detection 🎥")
+st.title("👀 Person Detection in ROI 🎥")
 
 model = YOLO("yolov8s.pt")
 
@@ -21,17 +19,11 @@ def get_youtube_stream_url(yt_url):
         return info["url"]
 
 def beep():
-    if platform.system() == "Windows":
-        import winsound
-        winsound.Beep(1000, 300)
-    else:
-        if os.path.exists("alert.wav"):
-            try:
-                sa.WaveObject.from_wave_file("alert.wav").play()
-            except Exception:
-                pass
+    if os.path.exists("alert.wav"):
+        with open("alert.wav", "rb") as f:
+            st.audio(f.read(), format="audio/wav", autoplay=True)
 
-def detect_person_in_roi(frame, roi, model):
+def detect_person_in_roi(frame, roi):
     found = False
     if roi is None:
         return frame, found
@@ -49,18 +41,18 @@ def detect_person_in_roi(frame, roi, model):
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
     return frame, found
 
-source = st.radio("Video source", ["Upload Video", "YouTube Link", "Live Camera"])
+source = st.radio("📹 Select video source", ["Upload Video", "YouTube Link", "Live Camera"])
 cap = None
 
 if source == "Upload Video":
-    uploaded_file = st.file_uploader("Upload video", type=["mp4", "avi", "mov"])
+    uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "avi", "mov"])
     if uploaded_file:
         temp_file = tempfile.NamedTemporaryFile(delete=False)
         temp_file.write(uploaded_file.read())
         cap = cv2.VideoCapture(temp_file.name)
 
 elif source == "YouTube Link":
-    yt_url = st.text_input("Enter YouTube URL")
+    yt_url = st.text_input("Enter YouTube URL:")
     if yt_url:
         try:
             stream_url = get_youtube_stream_url(yt_url)
@@ -72,14 +64,13 @@ elif source == "Live Camera":
     cap = cv2.VideoCapture(0)
 
 roi = None
-alert_playing = False
 
 if cap:
     ret, frame = cap.read()
     if ret:
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(frame_rgb)
-        st.write("🖌️ Draw ROI (Region of Interest)")
+        st.write("🖌️ Draw a rectangle to select ROI")
         canvas = st_canvas(
             fill_color="rgba(255, 0, 0, 0.2)",
             stroke_color="red",
@@ -104,20 +95,16 @@ if cap:
             break
         if roi:
             cv2.rectangle(frame, (roi[0], roi[1]), (roi[2], roi[3]), (255, 0, 0), 2)
-        frame, found = detect_person_in_roi(frame, roi, model)
-
-        if found and not alert_playing:
+        frame, found = detect_person_in_roi(frame, roi)
+        if found:
             beep()
-            alert_playing = True
-        elif not found:
-            alert_playing = False
-
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         stframe.image(frame_rgb, channels="RGB")
-
     cap.release()
 
 st.markdown(
-    "<div style='position: fixed; bottom: 10px; right: 10px; font-size:12px;'>Made with ❤️ using ChatGPT</div>",
+    "<div style='position: fixed; bottom: 10px; right: 10px; font-size:12px;'>"
+    "Made with ❤️😊 using ChatGPT"
+    "</div>",
     unsafe_allow_html=True
 )
