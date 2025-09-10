@@ -1,7 +1,7 @@
-streamlit
-ultralytics
-opencv-python-headless
-pillow
+streamlit>=1.30.0
+ultralytics>=8.3.1
+opencv-python-headless>=4.8.1
+pillow>=9.5.0
 numpy
 yt-dlp
 streamlit-drawable-canvas
