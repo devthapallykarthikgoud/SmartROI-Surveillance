@@ -5,77 +5,55 @@ import platform
 import os
 from ultralytics import YOLO
 
-# Audio cross-platform handling
 if platform.system() == "Windows":
     import winsound
 else:
     from playsound import playsound
 
-
-# ========================
-# Utility: Play Sound
-# ========================
-def play_alert():
-    """Play alert sound cross-platform"""
+def beep():
     if platform.system() == "Windows":
-        winsound.Beep(1000, 500)  # freq=1000Hz, duration=500ms
+        winsound.Beep(1000, 500)
     else:
-        # Expect an alert.wav in root folder
         if os.path.exists("alert.wav"):
             playsound("alert.wav")
-        else:
-            st.warning("Alert sound file not found (alert.wav)")
 
-
-# ========================
-# Streamlit UI
-# ========================
 st.set_page_config(page_title="Smart ROI Surveillance", layout="wide")
-st.title("🎥 Smart ROI Surveillance with YOLOv8")
+st.title("Smart ROI Surveillance")
 
-uploaded_file = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
-use_webcam = st.checkbox("Use Webcam instead of video")
+video_file = st.file_uploader("Upload a video", type=["mp4", "avi", "mov"])
+use_cam = st.checkbox("Use Webcam")
 
-confidence_threshold = st.slider("Confidence Threshold", 0.1, 1.0, 0.5)
+conf = st.slider("Confidence", 0.1, 1.0, 0.5)
+model_name = st.selectbox("Model", ["yolov8n.pt", "yolov8s.pt"])
+model = YOLO(model_name)
 
-model_choice = st.selectbox("Choose YOLO model", ["yolov8n.pt", "yolov8s.pt"])
-model = YOLO(model_choice)
-
-# ========================
-# Video Processing
-# ========================
-if uploaded_file or use_webcam:
-    tfile = None
-    if uploaded_file:
-        tfile = tempfile.NamedTemporaryFile(delete=False)
-        tfile.write(uploaded_file.read())
-        video_path = tfile.name
+if video_file or use_cam:
+    tmp = None
+    if video_file:
+        tmp = tempfile.NamedTemporaryFile(delete=False)
+        tmp.write(video_file.read())
+        path = tmp.name
     else:
-        video_path = 0  # webcam
+        path = 0
 
-    cap = cv2.VideoCapture(video_path)
-    stframe = st.empty()
+    cap = cv2.VideoCapture(path)
+    frame_window = st.empty()
 
     while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
+        ok, frame = cap.read()
+        if not ok:
             break
+        results = model(frame, conf=conf)
+        view = results[0].plot()
+        frame_window.image(view, channels="BGR")
 
-        # Run YOLO detection
-        results = model(frame, conf=confidence_threshold)
-        annotated_frame = results[0].plot()
-
-        # Show frame in Streamlit
-        stframe.image(annotated_frame, channels="BGR")
-
-        # Example: play alert if person detected
         for box in results[0].boxes:
             cls = int(box.cls[0])
-            label = model.names[cls]
-            if label.lower() == "person":
-                play_alert()
-                break  # avoid multiple alerts per frame
+            name = model.names[cls]
+            if name.lower() == "person":
+                beep()
+                break
 
     cap.release()
-    if tfile:
-        os.remove(tfile.name)
+    if tmp:
+        os.remove(tmp.name)
