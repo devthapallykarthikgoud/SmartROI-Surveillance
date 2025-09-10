@@ -6,19 +6,20 @@ import yt_dlp
 from streamlit_drawable_canvas import st_canvas
 from PIL import Image
 import os
+import time
 
 st.title("👀 Person Detection in ROI 🎥")
 
 # Load YOLO model
 model = YOLO("yolov8s.pt")
 
-# Audio alert helper
+# Play beep once per detection
 def beep_once():
     if os.path.exists("alert.wav"):
         with open("alert.wav", "rb") as f:
             st.audio(f.read(), format="audio/wav", autoplay=True)
 
-# Download YouTube video temporarily
+# Download YouTube video fully to temp file
 def get_youtube_temp_video(yt_url):
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
     ydl_opts = {
@@ -28,9 +29,11 @@ def get_youtube_temp_video(yt_url):
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([yt_url])
+    # Wait a moment to ensure file is written
+    time.sleep(1)
     return temp_file.name
 
-# Person detection in ROI
+# Detect person in ROI
 def detect_person_in_roi(frame, roi, model):
     detected = False
     if roi is None:
@@ -53,15 +56,16 @@ def detect_person_in_roi(frame, roi, model):
 source = st.radio("Select video source", ["Upload Video", "YouTube Link", "Live Camera"])
 cap = None
 
-# Handle uploaded video
+# Uploaded video
 if source == "Upload Video":
     uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "avi", "mov"])
     if uploaded_file:
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
         temp_file.write(uploaded_file.read())
+        temp_file.flush()
         cap = cv2.VideoCapture(temp_file.name)
 
-# Handle YouTube video
+# YouTube video
 elif source == "YouTube Link":
     yt_url = st.text_input("Enter YouTube URL:")
     if yt_url:
@@ -71,7 +75,7 @@ elif source == "YouTube Link":
         except Exception as e:
             st.error(f"Failed to load YouTube video: {e}")
 
-# Handle live camera
+# Live camera
 elif source == "Live Camera":
     cap = cv2.VideoCapture(0)
 
@@ -103,7 +107,7 @@ if cap:
             st.warning("No ROI selected. Detection will cover full frame.")
 
     stframe = st.empty()
-    beep_triggered = False  # to play beep once per detection
+    beep_triggered = False  # play beep once per detection
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -116,7 +120,7 @@ if cap:
             beep_once()
             beep_triggered = True
         elif not detected:
-            beep_triggered = False  # reset when no person detected
+            beep_triggered = False
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         stframe.image(frame_rgb, channels="RGB")
 
