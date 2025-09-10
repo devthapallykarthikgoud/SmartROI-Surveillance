@@ -5,5 +5,4 @@ pillow>=9.5.0
 numpy
 yt-dlp
 streamlit-drawable-canvas
-simpleaudio
 gTTS
