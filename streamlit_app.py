@@ -9,19 +9,28 @@ import os
 
 st.title("👀 Person Detection in ROI 🎥")
 
+# Load YOLO model
 model = YOLO("yolov8s.pt")
 
-def get_youtube_stream_url(yt_url):
-    ydl_opts = {"format": "best[ext=mp4]/best", "quiet": True}
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(yt_url, download=False)
-        return info["url"]
-
-def beep():
+# Audio alert helper
+def beep_once():
     if os.path.exists("alert.wav"):
         with open("alert.wav", "rb") as f:
             st.audio(f.read(), format="audio/wav", autoplay=True)
 
+# Download YouTube video temporarily
+def get_youtube_temp_video(yt_url):
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+    ydl_opts = {
+        "format": "best[ext=mp4]/best",
+        "outtmpl": temp_file.name,
+        "quiet": True
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([yt_url])
+    return temp_file.name
+
+# Person detection in ROI
 def detect_person_in_roi(frame, roi, model):
     detected = False
     if roi is None:
@@ -40,30 +49,35 @@ def detect_person_in_roi(frame, roi, model):
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
     return frame, detected
 
+# Select video source
 source = st.radio("Select video source", ["Upload Video", "YouTube Link", "Live Camera"])
 cap = None
 
+# Handle uploaded video
 if source == "Upload Video":
     uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "avi", "mov"])
     if uploaded_file:
-        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
         temp_file.write(uploaded_file.read())
         cap = cv2.VideoCapture(temp_file.name)
 
+# Handle YouTube video
 elif source == "YouTube Link":
     yt_url = st.text_input("Enter YouTube URL:")
     if yt_url:
         try:
-            stream_url = get_youtube_stream_url(yt_url)
-            cap = cv2.VideoCapture(stream_url)
+            video_file = get_youtube_temp_video(yt_url)
+            cap = cv2.VideoCapture(video_file)
         except Exception as e:
             st.error(f"Failed to load YouTube video: {e}")
 
+# Handle live camera
 elif source == "Live Camera":
     cap = cv2.VideoCapture(0)
 
 roi = None
 
+# Draw ROI on first frame
 if cap:
     ret, frame = cap.read()
     if ret:
@@ -85,8 +99,12 @@ if cap:
             left, top, width, height = int(obj["left"]), int(obj["top"]), int(obj["width"]), int(obj["height"])
             roi = (left, top, left + width, top + height)
             st.success(f"ROI selected: {roi}")
+        else:
+            st.warning("No ROI selected. Detection will cover full frame.")
 
     stframe = st.empty()
+    beep_triggered = False  # to play beep once per detection
+
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
@@ -94,10 +112,14 @@ if cap:
         if roi:
             cv2.rectangle(frame, (roi[0], roi[1]), (roi[2], roi[3]), (255, 0, 0), 2)
         frame, detected = detect_person_in_roi(frame, roi, model)
-        if detected:
-            beep()
+        if detected and not beep_triggered:
+            beep_once()
+            beep_triggered = True
+        elif not detected:
+            beep_triggered = False  # reset when no person detected
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         stframe.image(frame_rgb, channels="RGB")
+
     cap.release()
 
 st.markdown(
