@@ -25,8 +25,8 @@ https://github.com/user-attachments/assets/e50187ea-598f-4b49-8c20-45b758c4b8bf
 
 ## 📂 Project Structure  
 
-SmartROI-Surveillance/
-│ ├── streamlit_app.py
+SmartROI-Surveillance/\n
+│ ├── streamlit_app.py\n
 │ ├── yolov8n.pt
 │ ├── yolov8s.pt
 ├── requirements.txt # Python dependencies
