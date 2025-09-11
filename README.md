@@ -26,19 +26,9 @@ https://github.com/user-attachments/assets/e50187ea-598f-4b49-8c20-45b758c4b8bf
 ## 📂 Project Structure  
 
 SmartROI-Surveillance/
-│── Main.py # Entry point for the app
-│── ObjectDetection.py # YOLO-based detection logic
-│── AudioManager.py # Audio alert handling
-│── utils.py # Helper functions
-│
-├── models/ # Pre-trained YOLO configs/weights
-│ ├── yolov3.cfg
-│ ├── yolov3.weights
-│ ├── yolov3-labels.txt
-│
-├── assets/ # Audio files, icons, sample images
-├── outputs/ # Auto-saved screenshots and logs
-│
+│ ├── streamlit_app.py
+│ ├── yolov8n.pt
+│ ├── yolov8s.pt
 ├── requirements.txt # Python dependencies
 ├── README.md # Project documentation
 └── .streamlit/ # Streamlit config (if deploying online)
